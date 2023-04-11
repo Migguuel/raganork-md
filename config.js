@@ -53,7 +53,7 @@ module.exports = {
     DATABASE_URL: DATABASE_URL,
     DATABASE: DATABASE_URL === './bot.db' ? new Sequelize({ dialect: "sqlite", storage: DATABASE_URL, logging: DEBUG }) : new Sequelize(DATABASE_URL, { dialectOptions: { ssl: { require: true, rejectUnauthorized: false } }, logging: DEBUG }),
     SUDO: process.env.SUDO || "",
-    LANGUAGE: process.env.LANGUAGE || 'english',
+    LANGUAGE: process.env.LANGUAGE || 'français',
     DEBUG: DEBUG,
     ACR_A: "ff489a0160188cf5f0750eaf486eee74",
     ACR_S: "ytu3AdkCu7fkRVuENhXxs9jsOW4YJtDXimAWMpJp"
