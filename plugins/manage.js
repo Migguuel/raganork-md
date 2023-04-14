@@ -30,6 +30,8 @@ async function sendButton(buttons,text,footer,message){
     } = require('./misc/misc');
     const Config = require('../config');
     const config = require('../config');
+    const {getCommands} = require('./commands');
+    const {HEROKU} = require('../config');
     const Heroku = require('heroku-client');
     const fs = require('fs');
     const got = require('got');
@@ -40,8 +42,27 @@ async function sendButton(buttons,text,footer,message){
     const heroku = new Heroku({
         token: Config.HEROKU.API_KEY
     });
+    let baseURI = '/apps/' + Config.HEROKU.APP_NAME;
     var handler = Config.HANDLERS !== 'false'?Config.HANDLERS.split("")[0]:""
-    async function setVar(key,value,message){
+        async function fixHerokuAppName(message){
+            if (!HEROKU.API_KEY) return await message.sendReply(`_You have not provided HEROKU_API_KEY\n\nPlease fill this var, get api key from heroku account settings_`)
+            let apps = await heroku.get('/apps')
+            let app_names = apps.map(e=>e.name)
+            if (!HEROKU.APP_NAME || !app_names.includes(Config.HEROKU.APP_NAME)){
+            function findGreatestNumber(e){let t=e[0];for(let n=1;n<e.length;n++)e[n]>t&&(t=e[n]);return t}
+            let times = apps.map(e=>new Date(e.updated_at).getTime())
+            let latest = findGreatestNumber(times)
+            let index = times.indexOf(latest)
+            let app_name = apps[index].name
+            Config.HEROKU.APP_NAME = app_name
+            process.env.HEROKU_APP_NAME = app_name
+            baseURI = '/apps/' + app_name;
+            await message.sendReply(`_You provided an incorrect heroku app name, and I have corrected your app name to "${app_name}"_\n\n_Please retry this command after restart!_`)    
+            Config.HEROKU.APP_NAME = app_name
+                return await setVar("HEROKU_APP_NAME",app_name,message)
+            }
+        }
+        async function setVar(key,value,message){
         key = key.toUpperCase().trim()
         value = value.trim()
         let setvarAction = isHeroku ? "restarting" : isVPS ? "rebooting" : "redeploying";
@@ -50,12 +71,15 @@ async function sendButton(buttons,text,footer,message){
         set_ = set_.format(setvarAction)
         let m = message;
         if (isHeroku) {
+            await fixHerokuAppName(message)
             await heroku.patch(baseURI + '/config-vars', {
                 body: {
                     [key]: value
                 }
             }).then(async (app) => {
+                if (message){
                 return await message.sendReply(set_)
+                }
             });
         }
         if (isVPS){
@@ -76,18 +100,20 @@ async function sendButton(buttons,text,footer,message){
         lines.push(`${key}="${value}"`);
         }
 fs.writeFileSync('./config.env', lines.join('\n'));
+        if (message){
         await m.sendReply(set_)
+        }
         if (key == "SESSION"){
         await require('fs-extra').removeSync('./baileys_auth_info'); 
         }
         process.exit(0)    
     } catch(e){
-            return await m.sendReply("_Are you a VPS user? Check out wiki for more._\n"+e.message);
+        if (message) return await m.sendReply("_Are you a VPS user? Check out wiki for more._\n"+e.message);
         }
         } 
         if (__dirname.startsWith("/rgnk")) {
             let set_res = await update(key,value)
-            if (set_res) return await m.sendReply(set_)
+            if (set_res && message) return await m.sendReply(set_)
             else throw "Error!"
         }   
     }
@@ -104,7 +130,6 @@ fs.writeFileSync('./config.env', lines.join('\n'));
         var sDisplay = s > 0 ? s + (s == 1 ? " second" : " seconds") : "";
         return dDisplay + hDisplay + mDisplay + sDisplay;
         }
-    let baseURI = '/apps/' + Config.HEROKU.APP_NAME;
     Module({
         pattern: 'restart$',
         fromMe: true,
@@ -112,6 +137,7 @@ fs.writeFileSync('./config.env', lines.join('\n'));
         use: 'owner'
     }, (async (message, match) => {
         if (!isHeroku) return await message.sendReply("_This is a heroku command, but this bot is not running on heroku!_");
+        await fixHerokuAppName(message)
         await message.sendReply(Lang.RESTART_MSG)
         await heroku.delete(baseURI + '/dynos').catch(async (error) => {
             await message.send(error.message)
@@ -126,6 +152,7 @@ fs.writeFileSync('./config.env', lines.join('\n'));
         if (isVPS){
             return await pm2.stop("Raganork");
         } else if (isHeroku){
+            await fixHerokuAppName(message)
             await heroku.get(baseURI + '/formation').then(async (formation) => {
             forID = formation[0].id;
             await message.sendReply(Lang.SHUTDOWN_MSG)
@@ -146,6 +173,7 @@ fs.writeFileSync('./config.env', lines.join('\n'));
         use: 'owner'
     }, (async (message, match) => {
         if (!isHeroku) return await message.sendReply("_This is a heroku command, but this bot is not running on heroku!_");
+        await fixHerokuAppName(message)
         heroku.get('/account').then(async (account) => {
             url = "https://api.heroku.com/accounts/" + account.id + "/actions/get-quota"
             headers = {
@@ -195,6 +223,7 @@ fs.writeFileSync('./config.env', lines.join('\n'));
         use: 'owner'
     }, (async (message, match) => {
         if (!isHeroku) return await message.sendReply("_This is a heroku command, but this bot is not running on heroku!_");
+        await fixHerokuAppName(message)
         if (match[1] === '') return await message.sendReply(Lang.NOT_FOUND)
         await heroku.get(baseURI + '/config-vars').then(async (vars) => {
             key = match[1].trim();
@@ -234,6 +263,7 @@ fs.writeFileSync('./config.env', lines.join('\n'));
                 return await message.sendReply(fs.readFileSync(`./config.env`).toString('utf-8'));
             }
             if (!isHeroku) return await message.sendReply("_This is a heroku command, but this bot is not running on heroku!_");
+            await fixHerokuAppName(message)
             let msg = Lang.ALL_VARS + "\n\n\n```"
             await heroku
                 .get(baseURI + "/config-vars")
@@ -385,6 +415,28 @@ const oldSudo = config.SUDO?.split(",")
         return await message.sendReply("_Antispam mode_\n\n"+"_Current status: *"+toggle+"*\n\n_Use: .antispam on/off_")
     }));
     Module({
+        pattern: 'toggle ?(.*)',
+        fromMe: true,
+        desc: "To toggle commands on/off (enable/disable)",
+        usage: '.toggle img',
+        use: 'group'
+    }, (async (message, match) => {
+        var disabled = process.env.DISABLED_COMMANDS?.split(',') || []
+        match = match[1]
+        const commands = getCommands()
+        if (match){
+            if (!commands.includes(match.trim())) return await message.sendReply(`_${handler}${match.trim()} is not a valid command!_`)
+            if (!disabled.includes(match)){
+            disabled.push(match.trim())
+            await message.sendReply(`_Successfully turned off \`${handler}${match}\` command_\n_Use ${handler}toggle ${match} to enable this command back_`)
+            return await setVar("DISABLED_COMMANDS",disabled.join(','),false)
+                } else {
+                    await message.sendReply(`_Successfully turned on \`${handler}${match}\` command_`)
+                    return await setVar("DISABLED_COMMANDS",disabled.filter(x=>x!=match).join(','),false)
+                    }
+        } else return await message.sendReply(`_Example: ${handler}toggle img_\n\n_(This will disable .img command)_`)
+    }));
+    Module({
         pattern: 'antibot ?(.*)',
         fromMe: true,
         desc: "Detects other bot's messages and kicks.",
@@ -465,4 +517,4 @@ const oldSudo = config.SUDO?.split(",")
     }
     }));
     
-module.exports = {setVar}
+module.exports = {setVar,fixHerokuAppName}
