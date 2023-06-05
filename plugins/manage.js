@@ -32,7 +32,7 @@ async function sendButton(buttons,text,footer,message){
     const Config = require('../config');
     const config = require('../config');
     const {getCommands} = require('./commands');
-    const {HEROKU} = require('../config');
+    const {HEROKU, settingsMenu} = require('../config');
     const Heroku = require('heroku-client');
     const fs = require('fs');
     const got = require('got');
@@ -45,8 +45,8 @@ async function sendButton(buttons,text,footer,message){
     });
     let baseURI = '/apps/' + Config.HEROKU.APP_NAME;
     var handler = Config.HANDLERS !== 'false'?Config.HANDLERS.split("")[0]:""
-        async function fixHerokuAppName(message){
-            if (!HEROKU.API_KEY) return await message.sendReply(`_You have not provided HEROKU_API_KEY\n\nPlease fill this var, get api key from heroku account settings_`)
+        async function fixHerokuAppName(message = false){
+            if (!HEROKU.API_KEY && message) return await message.sendReply(`_You have not provided HEROKU_API_KEY\n\nPlease fill this var, get api key from heroku account settings_`)
             let apps = await heroku.get('/apps')
             let app_names = apps.map(e=>e.name)
             if (!HEROKU.APP_NAME || !app_names.includes(Config.HEROKU.APP_NAME)){
@@ -58,12 +58,12 @@ async function sendButton(buttons,text,footer,message){
             Config.HEROKU.APP_NAME = app_name
             process.env.HEROKU_APP_NAME = app_name
             baseURI = '/apps/' + app_name;
-            await message.sendReply(`_You provided an incorrect heroku app name, and I have corrected your app name to "${app_name}"_\n\n_Please retry this command after restart!_`)    
+            if (message) await message.sendReply(`_You provided an incorrect heroku app name, and I have corrected your app name to "${app_name}"_\n\n_Please retry this command after restart!_`)    
             Config.HEROKU.APP_NAME = app_name
                 return await setVar("HEROKU_APP_NAME",app_name,message)
             }
         }
-        async function setVar(key,value,message){
+        async function setVar(key,value,message = false){
         key = key.toUpperCase().trim()
         value = value.trim()
         let setvarAction = isHeroku ? "restarting" : isVPS ? "rebooting" : "redeploying";
@@ -143,6 +143,13 @@ fs.writeFileSync('./config.env', lines.join('\n'));
         await heroku.delete(baseURI + '/dynos').catch(async (error) => {
             await message.send(error.message)
         });
+    }));
+    Module({
+        pattern: 'platform',
+        fromMe: true,
+        use: 'owner'
+    }, (async (message, match) => {
+      return await message.sendReply(`_Bot is running on ${config.PLATFORM}_`)
     }));
     Module({
         pattern: 'shutdown$',
@@ -291,47 +298,17 @@ fs.writeFileSync('./config.env', lines.join('\n'));
         if (match[1]?.toLowerCase() === 'off'){
             return await setVar("CHATBOT",'off',message)
         }
-        return await message.sendReply("_AI ChatBot mode_\n\n"+"_Current status: *"+toggle+"*\n\n_Use: .chatbot on/off_")    
+        return await message.sendReply("_AI ChatBot mode_\n\n"+"_Current status: *"+config.CHATBOT+"*\n\n_Use: .chatbot on/off_")    
     }));
     Module({
         pattern: 'settings ?(.*)',
         fromMe: true,
-        desc: "Bot settings. Enable extra options related to WhatsApp visibility.",
+        desc: "Bot settings to enable extra options related to WhatsApp bot functionality.",
         use: 'owner'
     }, (async (message, match) => {
-        if (match[1].includes(";")){
-            let key_ = match[1].split(";")
-            var buttons = [
-                {buttonId: handler+`setvar ${key_[0]}:true`, buttonText: {displayText: 'ON'}, type: 1},
-                {buttonId: handler+`setvar ${key_[0]}:false`, buttonText: {displayText: 'OFF'}, type: 1}
-            ]
-            return await sendButton(buttons,`_${key_[1]}_`,`_Current status: ${config[key_[0]]?'enabled':'disabled'}_`,message)
-    
-        }
-            const sections = [
-                {
-                title: "Configure these:",
-                rows: [
-                    {title: "Auto read all messages", rowId: handler+"settings READ_MESSAGES;Auto read all messages"},
-                    {title: "Auto read command messages", rowId: handler+"settings READ_COMMAND;Auto read command messages"},
-                    {title: "Auto read status updates", rowId: handler+"settings AUTO_READ_STATUS;Auto read status updates"},
-                    {title: "Auto reject calls", rowId: handler+"settings REJECT_CALLS;Auto reject calls"},
-                    {title: "Always online", rowId: handler+"settings ALWAYS_ONLINE;Always Online"},
-                    {title: "PM Auto blocker", rowId: handler+"settings PMB_VAR;PM auto blocker"},
-                    {title: "Disable bot in PM", rowId: handler+"settings DIS_PM;Disable public bot use in PM"}
-                ]
-                }
-            ]
-            
-            const listMessage = {
-              text: " ",
-              footer: "_Configure your settings_",
-              title: "_Settings_",
-              buttonText: "view",
-              sections
-            }
-            
-         return await message.client.sendMessage(message.jid, listMessage)
+            let configs = settingsMenu
+        let msgToBeSent = "_*Settings configuration menu*_\n\n"+configs.map(e=>configs.indexOf(e)+1+'. _*'+e.title+'*_').join('\n')+'\n\n_Reply the number to continue_'
+        return await message.sendReply(msgToBeSent)
         }));
     Module({
         pattern: 'mode ?(.*)',
