@@ -7,6 +7,7 @@ const {
     getString
 } = require('./misc/lang');
 const Lang = getString('group');
+const {delay} = require('@whiskeysockets/baileys');
 const {
     isAdmin,
     isNumeric,
@@ -121,6 +122,55 @@ Module({
         mentions: [user]
     })
     await message.client.groupParticipantsUpdate(message.jid, [user], "promote")
+}))
+Module({
+    pattern: 'requests ?(.*)',
+    fromMe: true,
+    use: 'group',
+    usage: '.requests approve all or reject all',
+    desc: "Get list of pending join requests"
+}, (async (message, match) => {
+    if (!message.isGroup) return await message.sendReply(Lang.GROUP_COMMAND)
+    var admin = await isAdmin(message);
+    if (!admin) return await message.sendReply(Lang.NOT_ADMIN)
+    let approvalList = await message.client.groupRequestParticipantsList(message.jid)
+    if (!approvalList.length) return await message.sendReply("_No pending requests!_")
+    let approvalJids = approvalList.map(x=>x.jid)
+    if (match[1]){
+        match = match[1].toLowerCase()
+        switch(match){
+            case 'approve all':{
+                for (let x of approvalJids){
+                    await message.client.groupRequestParticipantsUpdate(message.jid,[x],"approve")
+                    await delay(1000)
+                }
+                break;
+            }
+            case 'reject all':{
+                for (let x of approvalJids){
+                    await message.client.groupRequestParticipantsUpdate(message.jid,[x],"reject")
+                    await delay(1000)    
+                }
+                break;
+            }
+            default:{
+                return await message.sendReply("_Invalid input_\n_Eg: .requests approve all_\n_.requests reject all_")
+            }
+        }  
+        return;  
+    }
+    let msg = '*_Group join requests_*\n\n_(Use .requests approve|reject all)_\n\n'
+    const requestType = (type_,requestor) => {
+        switch(type_){
+            case 'linked_group_join' : return 'community'
+            case 'invite_link' : return 'invite link'
+            case 'non_admin_add' : return `added by +${requestor.split("@")[0]}`
+        }
+    }
+    for (let x in approvalList){
+        msg+=`*_${(parseInt(x)+1)}. @${approvalList[x].jid.split("@")[0]}_*\n  _• via: ${requestType(approvalList[x].request_method,approvalList[x].requestor)}_\n  _• at: ${new Date(parseInt(approvalList[x].request_time)*1000).toLocaleString()}_\n\n`
+    }
+    return await message.client.sendMessage(message.jid,{text:msg,mentions:approvalJids},{quoted:message.data})
 }))
 Module({
     pattern: 'leave',
