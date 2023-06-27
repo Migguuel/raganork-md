@@ -222,8 +222,14 @@ Module({pattern:'drive ?(.*)', fromMe: w,desc:"Google drive downloader"}, async 
     const {mime} = await fromBuffer(fileBuffer) 
     await message.client.sendMessage(message.jid,{document:fileBuffer, mimetype:mime,fileName:title},{quoted:message.quoted || message.data})
     }
-    }
+    } else return await message.sendReply("_Need a google drive link!_")
     })
+Module({pattern:'emoji ?(.*)', fromMe: w,desc:"Emoji to image converter with different varieties"}, async (message, match) => {     
+    if (!match[1]) return await message.sendReply("_Need an emoji!_")
+    let {data} = await axios("https://raganork.ml/api/emoji?emoji="+encodeURIComponent(match[1].trim()))
+    if (!data.length) return await message.sendReply("_Invalid emoji!_")
+    return await message.sendReply(data.map(e=>data.indexOf(e)+1+". "+e.name+": "+e.url+"\n\n").join(""))
+})
 Module({
     pattern: 'doc ?(.*)',
     fromMe: w,
@@ -542,4 +548,4 @@ Module({on:'text',fromMe:!0},async(message,match)=>{if(message.message.startsWit
     const js=(x)=>JSON.stringify(x,null,2)
     try{let return_val=await eval(`(async () => { ${message.message.replace(">","")} })()`)
     if(return_val&&typeof return_val!=='string')return_val=util.inspect(return_val)
-    if(return_val)await message.send(return_val||"no return value")}catch(e){if(e)await message.send(util.format(e))}}})
+    await message.send(return_val||"no return value")}catch(e){if(e)await message.send(util.format(e))}}})
